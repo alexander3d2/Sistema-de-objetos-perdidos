@@ -1,34 +1,45 @@
+{#- Split-screen login: UCSS logo on the left half, dark card centered on the right half.
+    The global header/footer are emptied on purpose; see the layout blocks in base.html. -#}
 {% extends "base.html" %}
-{% block title %}Login{% endblock %}
+{% from "_macros.html" import field, form_errors, flash_messages, auth_spheres, auth_brand, auth_card_top, auth_scripts %}
+{% block title %}Iniciar sesión{% endblock %}
+{% block body_class %}app-shell auth-page flex min-h-screen flex-col font-sans text-slate-900 antialiased{% endblock %}
+{% block header %}{% endblock %}
+{% block main_class %}auth-main flex-1{% endblock %}
+{% block flash %}{% endblock %}
+{% block footer %}{% endblock %}
 
 {% block content %}
+<div class="auth-split">
+  {{ auth_spheres() }}
+  {{ auth_brand() }}
 
-<h1 class="text-3xl font-bold mb-8 text-center">Login</h1>
+  <div class="auth-panel">
+    <div class="auth-card">
+      {{ auth_card_top() }}
 
-<div class="max-w-md mx-auto bg-white p-8 rounded-xl shadow">
+      <h1 class="auth-card__title">¡Bienvenido!</h1>
+      <p class="auth-card__subtitle">Inicie sesión para reportar o consultar objetos</p>
 
-    <form method="POST">
+      {{ flash_messages() }}
+
+      <form method="post" action="{{ login_action }}" novalidate>
         {{ form.hidden_tag() }}
+        {{ form_errors(form) }}
 
-        <!-- Username -->
-        <label class="block font-medium mb-1">Username</label>
-        {{ form.username(class="w-full border rounded px-3 py-2 mb-4") }}
+        {{ field(form.username, autocomplete="username", autofocus=true, placeholder="Ingrese su usuario") }}
+        {{ field(form.password, autocomplete="current-password", placeholder="Ingrese su contraseña", password_toggle=true) }}
 
-        <!-- Password -->
-        <label class="block font-medium mb-1">Password</label>
-        {{ form.password(class="w-full border rounded px-3 py-2 mb-6") }}
+        <button type="submit" class="btn btn-primary auth-submit">{{ form.submit.label.text }}</button>
+      </form>
 
-        <!-- Button -->
-        <button class="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition">
-            Login
-        </button>
-    </form>
-
-    <p class="text-center text-gray-600 mt-4">
-        Don’t have an account?
-        <a href="{{ url_for('auth.register') }}" class="text-blue-600 hover:underline">Register</a>
-    </p>
-
+      <p class="auth-card__switch">
+        ¿No tiene una cuenta?
+        <a href="{{ url_for('auth.register') }}">Regístrese</a>
+      </p>
+    </div>
+  </div>
 </div>
-
 {% endblock %}
+
+{% block scripts %}{{ auth_scripts() }}{% endblock %}

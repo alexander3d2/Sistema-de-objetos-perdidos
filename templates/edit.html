@@ -1,53 +1,54 @@
 {% extends "base.html" %}
-{% block title %}Edit Item{% endblock %}
+{% from "_macros.html" import page_header, field, form_errors, csrf_field %}
+{% block title %}Editar reporte{% endblock %}
 
 {% block content %}
+<div class="mx-auto max-w-2xl">
+  {{ page_header("Editar reporte", item.name) }}
 
-<h1 class="text-3xl font-bold mb-8">Edit Item</h1>
+  <div class="card">
+    <div class="card-body">
+      <form method="post" enctype="multipart/form-data" novalidate>
+        {{ csrf_field() }}
+        {{ form_errors(form) }}
 
-<div class="max-w-xl mx-auto bg-white p-8 rounded-xl shadow">
+        <section class="form-section" aria-labelledby="section-object">
+          <h2 class="form-section__title" id="section-object">Datos del objeto</h2>
+          {{ field(form.name, maxlength=120) }}
+          {{ field(form.description, rows=4, maxlength=500) }}
+          {{ field(form.category) }}
+        </section>
 
-    <form method="POST" enctype="multipart/form-data">
-        {{ form.hidden_tag() }}
+        <section class="form-section" aria-labelledby="section-place">
+          <h2 class="form-section__title" id="section-place">Lugar y fecha</h2>
+          {{ field(form.location, help="Indique dónde se perdió o se encontró el objeto.", maxlength=120) }}
+          <div class="grid grid-cols-1 gap-x-4 md:grid-cols-2">
+            {{ field(form.event_date) }}
+            {{ field(form.status) }}
+          </div>
+        </section>
 
-        <!-- Name -->
-        <label class="block font-medium mb-1">Name</label>
-        {{ form.name(class="w-full border rounded px-3 py-2 mb-5 focus:ring focus:border-blue-500") }}
+        <section class="form-section" aria-labelledby="section-contact">
+          <h2 class="form-section__title" id="section-contact">Contacto y fotografía</h2>
+          {{ field(form.contact, help="Correo o teléfono para coordinar la entrega.", maxlength=120) }}
+          {% if item.image_filename %}
+          <div class="mb-4">
+            <p class="form-label">Fotografía actual</p>
+            <img src="{{ url_for('static', filename='uploads/' ~ item.image_filename) }}"
+                 alt="Fotografía actual de {{ item.name }}"
+                 width="160" height="120"
+                 class="photo-preview">
+          </div>
+          {% endif %}
+          {{ field(form.image, help="PNG, JPG, GIF o WEBP. Tamaño máximo: 5 MB. Si no elige un archivo, se conserva la fotografía actual.", accept="image/png,image/jpeg,image/gif,image/webp") }}
+        </section>
 
-        <!-- Description -->
-        <label class="block font-medium mb-1">Description</label>
-        {{ form.description(class="w-full border rounded px-3 py-2 mb-5 focus:ring focus:border-blue-500") }}
-
-        <!-- Category -->
-        <label class="block font-medium mb-1">Category</label>
-        {{ form.category(class="w-full border rounded px-3 py-2 mb-5") }}
-
-        <!-- Quantity -->
-        <label class="block font-medium mb-1">Quantity</label>
-        {{ form.quantity(class="w-full border rounded px-3 py-2 mb-5 focus:ring focus:border-blue-500") }}
-
-        <!-- Price -->
-        <label class="block font-medium mb-1">Price ($)</label>
-        {{ form.price(class="w-full border rounded px-3 py-2 mb-6 focus:ring focus:border-blue-500") }}
-
-        <!-- Existing Image Preview -->
-        {% if item.image_filename %}
-            <div class="mb-4">
-                <p class="text-sm text-gray-600 mb-2">Current Image:</p>
-                <img src="{{ url_for('static', filename='uploads/' ~ item.image_filename) }}" class="w-40 h-40 object-cover rounded">
-            </div>
-        {% endif %}
-
-        <!-- Upload New Image -->
-        <label class="block font-medium mb-1">Change Image (optional)</label>
-        {{ form.image(class="w-full mb-6") }}
-
-        <!-- Save Button -->
-        <button class="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 transition">
-            Save Changes
-        </button>
-    </form>
-
+        <div class="mt-6 flex flex-wrap items-center gap-3">
+          <button type="submit" class="btn btn-primary">{{ form.submit.label.text }}</button>
+          <a href="{{ url_for('main.view', item_id=item.id) }}" class="btn btn-secondary">Cancelar</a>
+        </div>
+      </form>
+    </div>
+  </div>
 </div>
-
 {% endblock %}

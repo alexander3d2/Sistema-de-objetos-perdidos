@@ -1,42 +1,46 @@
+{#- Split-screen registration: same structure as login.html (see the layout blocks in base.html). -#}
 {% extends "base.html" %}
-{% block title %}Register{% endblock %}
+{% from "_macros.html" import field, form_errors, flash_messages, auth_spheres, auth_brand, auth_card_top, auth_scripts %}
+{% block title %}Crear cuenta{% endblock %}
+{% block body_class %}app-shell auth-page flex min-h-screen flex-col font-sans text-slate-900 antialiased{% endblock %}
+{% block header %}{% endblock %}
+{% block main_class %}auth-main flex-1{% endblock %}
+{% block flash %}{% endblock %}
+{% block footer %}{% endblock %}
 
 {% block content %}
+<div class="auth-split">
+  {{ auth_spheres() }}
+  {{ auth_brand() }}
 
-<h1 class="text-3xl font-bold mb-8 text-center">Create Account</h1>
+  <div class="auth-panel">
+    <div class="auth-card">
+      {{ auth_card_top() }}
 
-<div class="max-w-md mx-auto bg-white p-8 rounded-xl shadow">
+      <h1 class="auth-card__title">Crear cuenta</h1>
+      <p class="auth-card__subtitle">Registre un usuario para reportar objetos perdidos y encontrados</p>
 
-    <form method="POST">
+      {{ flash_messages() }}
+
+      <form method="post" action="{{ url_for('auth.register') }}" novalidate>
         {{ form.hidden_tag() }}
+        {{ form_errors(form) }}
 
-        <!-- Username -->
-        <label class="block font-medium mb-1">Username</label>
-        {{ form.username(class="w-full border rounded px-3 py-2 mb-4") }}
+        {{ field(form.username, autocomplete="username", autofocus=true, placeholder="Elija un nombre de usuario", help="Entre 3 y 64 caracteres.") }}
+        {{ field(form.email, type="email", autocomplete="email", placeholder="nombre@ejemplo.com") }}
+        {{ field(form.password, autocomplete="new-password", placeholder="Cree una contraseña", help="Mínimo 6 caracteres.", password_toggle=true) }}
+        {{ field(form.confirm_password, autocomplete="new-password", placeholder="Repita la contraseña", password_toggle=true) }}
 
-        <!-- Email -->
-        <label class="block font-medium mb-1">Email</label>
-        {{ form.email(class="w-full border rounded px-3 py-2 mb-4") }}
+        <button type="submit" class="btn btn-primary auth-submit">{{ form.submit.label.text }}</button>
+      </form>
 
-        <!-- Password -->
-        <label class="block font-medium mb-1">Password</label>
-        {{ form.password(class="w-full border rounded px-3 py-2 mb-4") }}
-
-        <!-- Confirm Password -->
-        <label class="block font-medium mb-1">Confirm Password</label>
-        {{ form.confirm_password(class="w-full border rounded px-3 py-2 mb-6") }}
-
-        <!-- Button -->
-        <button class="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 transition">
-            Register
-        </button>
-    </form>
-
-    <p class="text-center text-gray-600 mt-4">
-        Already have an account?
-        <a href="{{ url_for('auth.login') }}" class="text-blue-600 hover:underline">Login</a>
-    </p>
-
+      <p class="auth-card__switch">
+        ¿Ya tiene una cuenta?
+        <a href="{{ url_for('auth.login') }}">Inicie sesión</a>
+      </p>
+    </div>
+  </div>
 </div>
-
 {% endblock %}
+
+{% block scripts %}{{ auth_scripts() }}{% endblock %}

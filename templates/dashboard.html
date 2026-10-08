@@ -1,96 +1,147 @@
 {% extends "base.html" %}
+{% from "_macros.html" import page_header, empty_state %}
+
+{% block title %}Panel mensual{% endblock %}
+
 {% block content %}
+{% set s = summary %}
+{% set k = s.kpis %}
+<div class="flex flex-col gap-5">
+  {% call page_header("Panel mensual", s.month_label) %}
+    <a class="btn btn-primary" href="{{ url_for('main.export_csv', mes=s.mes) }}">
+      <i class="bi bi-download" aria-hidden="true"></i> Exportar mes (CSV)
+    </a>
+  {% endcall %}
 
-<h1 class="text-3xl font-bold mb-8">📊 Dashboard Overview</h1>
-
-<!-- Stats Row -->
-<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-
-    <!-- Total Items -->
-    <div class="bg-white p-6 rounded-xl shadow">
-        <h3 class="text-gray-600 text-lg">Total Items</h3>
-        <p class="text-3xl font-bold text-blue-600">{{ total_items }}</p>
+  <section class="card" aria-labelledby="month-navigation-title">
+    <div class="card-body flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <h2 id="month-navigation-title" class="text-base font-semibold text-slate-900">Seleccionar mes</h2>
+        <p class="mt-1 text-sm text-slate-500">Consulte los reportes por fecha del suceso.</p>
+      </div>
+      <form id="month-form" class="flex items-end gap-2" method="get" action="{{ url_for('dashboard.home') }}">
+        <div>
+          <label for="dashboard-month" class="form-label">Mes</label>
+          <input id="dashboard-month" class="form-input" type="month" name="mes" value="{{ s.mes }}">
+        </div>
+        <button class="btn btn-secondary" type="submit">Ver mes</button>
+      </form>
     </div>
-
-    <!-- Total Inventory Value -->
-    <div class="bg-white p-6 rounded-xl shadow">
-        <h3 class="text-gray-600 text-lg">Total Value</h3>
-        <p class="text-3xl font-bold text-green-600">
-            ${{ "{:,.2f}".format(total_value) }}
-        </p>
+    <div class="card-body flex items-center justify-between border-t border-slate-100 pt-4">
+      {% if s.prev_mes %}<a class="btn btn-ghost btn-sm" rel="prev" href="{{ url_for('dashboard.home', mes=s.prev_mes) }}" aria-label="Mes anterior">← Mes anterior</a>{% else %}<span class="btn btn-ghost btn-sm" aria-disabled="true">Mes anterior</span>{% endif %}
+      <span class="text-sm font-medium text-slate-700">{{ s.month_label }}</span>
+      {% if s.next_mes %}<a class="btn btn-ghost btn-sm" rel="next" href="{{ url_for('dashboard.home', mes=s.next_mes) }}" aria-label="Mes siguiente">Mes siguiente →</a>{% else %}<span class="btn btn-ghost btn-sm" aria-disabled="true">Mes siguiente</span>{% endif %}
     </div>
+  </section>
 
-    <!-- Low Stock -->
-    <div class="bg-white p-6 rounded-xl shadow">
-        <h3 class="text-gray-600 text-lg">Low Stock Items</h3>
-        <p class="text-3xl font-bold text-red-600">{{ low_stock|length }}</p>
-    </div>
+  <section class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5" aria-label="Indicadores del mes">
+    {% for name, label, value, note, style in [
+      ('total', 'Objetos reportados', k.total, k.delta_vs_previous, 'kpi-card--primary'),
+      ('lost', 'Perdidos', k.lost, 'Con fecha del suceso en el mes', 'kpi-card--lost'),
+      ('found', 'Encontrados', k.found, 'Con fecha del suceso en el mes', 'kpi-card--found'),
+      ('returned', 'Entregados', k.returned, 'Con fecha del suceso en el mes', 'kpi-card--returned'),
+      ('return_rate', 'Tasa de entrega', k.return_rate, 'Sobre los reportes del mes', 'kpi-card--rate')
+    ] %}
+      <article class="card kpi-card {{ style }}">
+        <p class="kpi-label">{{ label }}</p>
+        <p class="kpi-value" data-kpi="{{ name }}">{{ value if name == 'return_rate' else ('{:,}'.format(value).replace(',', '.')) }}</p>
+        {% if name == 'total' %}<p class="kpi-note">Perdidos o encontrados con fecha del suceso en el mes</p><p class="kpi-note" data-kpi="delta">{{ note }}</p>{% else %}<p class="kpi-note">{{ note }}</p>{% endif %}
+      </article>
+    {% endfor %}
+  </section>
+  <p class="sr-only">{{ k.total }} {{ 'reporte' if k.total == 1 else 'reportes' }} en el mes seleccionado.</p>
 
+  {% if has_reports %}
+    <section class="grid grid-cols-1 gap-5 lg:grid-cols-2" aria-label="Gráficos del panel">
+      {% set chart_tables = {
+        'daily': ('Reportes por día', 'Día'),
+        'categories': ('Reportes por categoría', 'Categoría'),
+        'locations': ('Lugares con más reportes', 'Lugar')
+      } %}
+      {% for key in ('daily', 'categories', 'locations') %}
+        {% set title = chart_tables[key][0] %}
+        {% set axis = chart_tables[key][1] %}
+        <article class="card chart-card">
+          <div class="card-header"><h2>{{ title }}</h2></div>
+          <div class="card-body">
+            <canvas id="chart-{{ key }}" role="img" aria-label="{{ title }} para {{ s.month_label }}"></canvas>
+            <details class="mt-4">
+              <summary>Ver datos en tabla</summary>
+              <table id="chart-table-{{ key }}" class="table mt-3">
+                <thead><tr><th>{{ axis }}</th><th>Reportes</th></tr></thead>
+                <tbody>{% for label in s[key].labels %}{% set index = loop.index0 %}<tr><td>{{ label }}</td><td>{{ s[key].counts[index] }}</td></tr>{% endfor %}</tbody>
+              </table>
+            </details>
+          </div>
+        </article>
+      {% endfor %}
+    </section>
+
+  {% endif %}
+  {% if has_reports %}
+    <section class="card" aria-labelledby="recent-title">
+      <div class="card-header flex items-center justify-between"><h2 id="recent-title">Últimos reportes</h2><a class="text-sm font-medium text-primary-800 hover:underline" href="{{ url_for('main.index', mes=s.mes) }}">Ver todos los reportes del mes</a></div>
+      <div class="table-wrap"><table id="dashboard-recent" class="table"><thead><tr><th>Objeto</th><th>Lugar</th><th>Categoría</th><th>Fecha</th><th>Estado</th></tr></thead><tbody>
+        {% for item in s.recent %}<tr><td><a class="font-medium text-primary-800 hover:underline" href="{{ url_for('main.view', item_id=item.id) }}">{{ item.name }}</a></td><td>{{ item.location.strip() if item.location and item.location.strip() else 'Sin especificar' }}</td><td>{{ item.category|categoria_label }}</td><td>{{ item.event_date|fecha }}</td><td><span class="badge {{ item.status|estado_badge }}">{{ item.status|estado_label }}</span></td></tr>{% endfor %}
+      </tbody></table></div>
+    </section>
+  {% else %}
+    {{ empty_state("No hay reportes con fecha del suceso en este mes.", "Registre un objeto o seleccione otro mes para consultar la información disponible.", url_for('main.add'), "Reportar objeto", "bi-inbox", "btn-secondary") }}
+    <a class="btn btn-secondary mt-3" href="#dashboard-month">Ver otro mes</a>
+  {% endif %}
 </div>
+{% endblock %}
 
-<!-- Graph -->
-<div class="bg-white p-6 rounded-xl shadow mb-10">
-    <h3 class="text-xl font-semibold mb-4">Inventory Value Chart</h3>
-
-    <canvas id="inventoryChart" height="100"></canvas>
-</div>
-
-<!-- Latest Items -->
-<div class="bg-white p-6 rounded-xl shadow">
-    <h3 class="text-xl font-semibold mb-4">Recently Added Items</h3>
-
-    <table class="w-full text-left">
-        <thead>
-            <tr class="border-b">
-                <th class="py-2">Name</th>
-                <th>Qty</th>
-                <th>Price</th>
-            </tr>
-        </thead>
-
-        <tbody>
-        {% for item in latest_items %}
-            <tr class="border-b">
-                <td class="py-2">{{ item.name }}</td>
-                <td>{{ "{:,}".format(item.quantity) }}</td>
-                <td>${{ "{:,.2f}".format(item.price) }}</td>
-            </tr>
-        {% endfor %}
-        </tbody>
-    </table>
-</div>
-
-<!-- Chart.js -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
+{% block scripts %}
+{% if has_reports %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"></script>
+<script type="application/json" id="dashboard-chart-data">{{ chart_json|safe }}</script>
 <script>
-document.addEventListener("DOMContentLoaded", () => {
-    const ctx = document.getElementById("inventoryChart");
-
-    new Chart(ctx, {
-        type: "bar",
-        data: {
-            labels: ["Total Inventory Value"],
-            datasets: [{
-                label: "Value",
-                data: [{{ total_value|float }}],
-                borderWidth: 1
-            }]
-        },
-        options: {
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    ticks: {
-                        callback: function(value) {
-                            return "$" + value.toLocaleString();
-                        }
-                    }
-                }
+document.addEventListener("DOMContentLoaded", function () {
+  var data = JSON.parse(document.getElementById("dashboard-chart-data").textContent);
+  if (typeof Chart === "undefined") return;
+  function draw(id, chartData, horizontal) {
+    var canvas = document.getElementById(id);
+    if (!canvas) return;
+    var scales = {};
+    scales[horizontal ? "x" : "y"] = {
+      beginAtZero: true,
+      ticks: { precision: 0 }
+    };
+    new Chart(canvas, {
+      type: "bar",
+      data: {
+        labels: chartData.labels,
+        datasets: [{
+          label: "Reportes",
+          data: chartData.counts,
+           backgroundColor: "#00a2c5",
+          borderWidth: 0
+        }]
+      },
+      options: Object.assign({
+         responsive: true,
+         animation: window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches ? false : {},
+        locale: "es",
+        scales: scales,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: function (context) {
+                var count = context.raw;
+                return count === 1 ? "1 reporte" : count.toLocaleString("es") + " reportes";
+              }
             }
+          }
         }
+      }, horizontal ? { indexAxis: "y" } : {})
     });
+  }
+  draw("chart-daily", data.daily, false);
+  draw("chart-categories", data.categories, false);
+  draw("chart-locations", data.locations, true);
 });
 </script>
-
+{% endif %}
 {% endblock %}

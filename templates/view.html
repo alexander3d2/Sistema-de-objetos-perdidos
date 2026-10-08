@@ -1,80 +1,89 @@
 {% extends "base.html" %}
+{% from "_macros.html" import delete_form, status_badge, csrf_field %}
+{% block title %}{{ item.name }}{% endblock %}
+
 {% block content %}
+<div class="mx-auto max-w-5xl">
+  <a href="{{ url_for('main.index') }}" class="back-link">
+    <i class="bi bi-arrow-left" aria-hidden="true"></i> Volver a los objetos
+  </a>
 
-<h1 class="text-4xl font-bold mb-8 text-center">Item Details</h1>
+  <div class="card mt-4">
+    <div class="card-body">
+      <div class="grid grid-cols-1 gap-8 md:grid-cols-2">
 
-<div class="max-w-4xl mx-auto bg-white shadow-lg rounded-2xl p-8">
-
-    <!-- MAIN GRID -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
-
-        <!-- IMAGE SECTION -->
-        <div class="flex justify-center">
-            <div class="w-48 h-48 bg-gray-100 border rounded-xl flex items-center justify-center text-gray-400 text-6xl">
-
-                {% if item.image_filename %}
-                    <img src="{{ url_for('static', filename='uploads/' ~ item.image_filename) }}"
-                         class="w-full h-full object-cover rounded-xl">
-                {% else %}
-                    <i class="bi bi-box-seam"></i>
-                {% endif %}
-
-            </div>
+        <div class="detail-photo">
+          {% if item.image_filename %}
+          <img src="{{ url_for('static', filename='uploads/' ~ item.image_filename) }}"
+               alt="{{ item.name }}" width="640" height="480">
+          {% else %}
+          <div class="detail-photo__placeholder" aria-hidden="true"><i class="bi bi-image"></i></div>
+          {% endif %}
         </div>
 
-        <!-- DETAILS SECTION -->
-        <div class="md:col-span-2">
+        <div class="min-w-0">
+          <h1 class="break-words text-2xl font-bold text-slate-900">{{ item.name }}</h1>
 
-            <h2 class="text-3xl font-bold mb-2">{{ item.name }}</h2>
+          <dl class="detail-grid">
+            <div>
+              <dt>Estado</dt>
+              <dd>{{ status_badge(item.status) }}</dd>
+            </div>
+            <div>
+              <dt>Categoría</dt>
+              <dd>{{ item.category|categoria_label }}</dd>
+            </div>
+            <div>
+              <dt>Lugar</dt>
+              <dd>{{ item.location or "No indicado" }}</dd>
+            </div>
+            <div>
+              <dt>Fecha del suceso</dt>
+              <dd>{{ item.event_date|fecha }}</dd>
+            </div>
+            <div>
+              <dt>Contacto</dt>
+              <dd class="break-words">{{ item.contact or "No indicado" }}</dd>
+            </div>
+            <div>
+              <dt>Reportado por</dt>
+              <dd>{{ item.user.username if item.user else "—" }}</dd>
+            </div>
+            <div>
+              <dt>Registrado el</dt>
+              <dd>{{ item.created_at|fecha }}</dd>
+            </div>
+          </dl>
 
-            <!-- CATEGORY -->
-            {% if item.category %}
-                <span class="px-3 py-1 bg-gray-200 text-gray-700 rounded text-sm">
-                    {{ item.category }}
-                </span>
+          <section class="mt-6" aria-labelledby="description-title">
+            <h2 id="description-title" class="form-label">Descripción</h2>
+            <p class="item-description text-slate-700">{{ item.description or "Sin descripción." }}</p>
+          </section>
+
+          {% if is_owner %}
+          <div class="mt-8 flex flex-wrap items-center gap-3">
+            {% if not item.is_returned %}
+            <form method="post" action="{{ url_for('main.mark_returned', item_id=item.id) }}" class="inline-block">
+              {{ csrf_field() }}
+              <button type="submit" class="btn btn-primary">
+                <i class="bi bi-check2-circle" aria-hidden="true"></i> Marcar como entregado
+              </button>
+            </form>
             {% endif %}
-
-            <!-- DESCRIPTION -->
-            <p class="item-description mt-4 text-gray-700">
-                {{ item.description or "No description available." }}
-            </p>
-
-            <!-- QUANTITY -->
-            <p class="mt-5 text-lg">
-                Quantity:
-                {% if item.quantity <= 5 %}
-                    <span class="text-red-600 font-semibold">{{ item.quantity }} (Low stock)</span>
-                {% else %}
-                    <span class="text-green-600 font-semibold">{{ item.quantity }}</span>
-                {% endif %}
-            </p>
-
-            <!-- PRICE -->
-            <p class="mt-2 text-xl font-bold text-green-700">
-                ${{ "%.2f"|format(item.price) }}
-            </p>
-
-            <!-- DATE -->
-            <p class="text-gray-500 mt-1 text-sm">
-                Added on {{ item.created_at.strftime("%B %d, %Y") }}
-            </p>
-
-            <!-- BUTTONS -->
-            <div class="mt-6 flex gap-4">
-                <a href="{{ url_for('main.edit', item_id=item.id) }}"
-                   class="px-5 py-2 bg-yellow-500 text-white font-medium rounded hover:bg-yellow-600">
-                    Edit Item
-                </a>
-
-                <a href="{{ url_for('main.delete', item_id=item.id) }}"
-                   class="px-5 py-2 bg-red-600 text-white font-medium rounded hover:bg-red-700">
-                    Delete
-                </a>
-            </div>
-
+            <a href="{{ url_for('main.edit', item_id=item.id) }}" class="btn btn-secondary">
+              <i class="bi bi-pencil" aria-hidden="true"></i> Editar
+            </a>
+            {{ delete_form(url_for('main.delete', item_id=item.id), 'Eliminar', '¿Desea eliminar el reporte «' ~ item.name ~ '»? Esta acción no se puede deshacer.', 'md') }}
+          </div>
+          {% else %}
+          <p class="mt-8 text-sm text-slate-500">
+            <i class="bi bi-lock" aria-hidden="true"></i> Solo quien creó el reporte puede modificarlo.
+          </p>
+          {% endif %}
         </div>
+
+      </div>
     </div>
-
+  </div>
 </div>
-
 {% endblock %}

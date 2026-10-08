@@ -1,18 +1,136 @@
 {% extends "base.html" %}
-{% block title %}Import Items{% endblock %}
+{% from "_macros.html" import page_header, csrf_field %}
+{% block title %}Importar CSV{% endblock %}
 
 {% block content %}
-<h1 class="text-3xl font-bold mb-8">Import Items from CSV</h1>
+<div class="mx-auto max-w-4xl space-y-6">
+  {{ page_header("Importar CSV", "Cargue varios reportes a la vez desde un archivo CSV.") }}
 
-<div class="max-w-md mx-auto bg-white p-8 rounded-xl shadow">
-    <form method="POST" enctype="multipart/form-data">
-        <label class="block font-medium mb-1">CSV File</label>
-        <input type="file" name="file" accept=".csv" class="mb-4">
-        <p class="text-sm text-gray-500 mb-4">CSV should have columns: name,description,quantity,price,category (headers recommended)</p>
-        <div class="flex gap-3">
-            <button class="bg-blue-600 text-white px-4 py-2 rounded">Upload</button>
-            <a href="{{ url_for('main.export_csv') }}" class="bg-gray-100 px-4 py-2 rounded hover:bg-gray-200">Download current CSV</a>
+  <section class="card" aria-labelledby="csv-format-title">
+    <div class="card-header" id="csv-format-title">Formato del archivo</div>
+    <div class="card-body space-y-4 text-sm text-slate-700">
+      <p>
+        La primera fila debe contener los nombres de las columnas, escritos en inglés como se muestra abajo.
+        Las columnas desconocidas se ignoran y el orden no importa.
+      </p>
+
+      <div class="table-wrap">
+        <table class="table">
+          <caption class="sr-only">Columnas admitidas</caption>
+          <thead>
+            <tr>
+              <th scope="col">Columna</th>
+              <th scope="col">Obligatoria</th>
+              <th scope="col">Contenido</th>
+              <th scope="col">Valores permitidos</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>name</code></td>
+              <td>Sí</td>
+              <td>Nombre del objeto</td>
+              <td>Hasta 120 caracteres.</td>
+            </tr>
+            <tr>
+              <td><code>location</code></td>
+              <td>Sí</td>
+              <td>Lugar donde se perdió o se encontró</td>
+              <td>Hasta 120 caracteres.</td>
+            </tr>
+            <tr>
+              <td><code>event_date</code></td>
+              <td>Sí</td>
+              <td>Fecha del suceso</td>
+              <td>AAAA-MM-DD (2026-03-15) o DD/MM/AAAA (15/03/2026). No puede ser posterior a hoy.</td>
+            </tr>
+            <tr>
+              <td><code>description</code></td>
+              <td>No</td>
+              <td>Descripción</td>
+              <td>Hasta 500 caracteres.</td>
+            </tr>
+            <tr>
+              <td><code>category</code></td>
+              <td>No</td>
+              <td>Categoría</td>
+              <td>
+                Puede escribir la clave o el nombre en español:
+                <ul class="mt-1 space-y-0.5">
+                  {% for key, label in categories.items() %}
+                  <li><code>{{ key }}</code> ({{ label }})</li>
+                  {% endfor %}
+                </ul>
+                Si está vacía, el reporte queda sin categoría.
+              </td>
+            </tr>
+            <tr>
+              <td><code>status</code></td>
+              <td>No</td>
+              <td>Estado del objeto</td>
+              <td>
+                Puede escribir la clave o el nombre en español:
+                <ul class="mt-1 space-y-0.5">
+                  {% for key, label in statuses.items() %}
+                  <li><code>{{ key }}</code> ({{ label }})</li>
+                  {% endfor %}
+                </ul>
+                Si está vacío, se usa «Perdido».
+              </td>
+            </tr>
+            <tr>
+              <td><code>contact</code></td>
+              <td>No</td>
+              <td>Correo o teléfono de contacto</td>
+              <td>Hasta 120 caracteres.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div>
+        <p class="mb-1 font-medium text-slate-900">Ejemplo con comas</p>
+        <pre class="overflow-x-auto rounded-md border border-slate-200 bg-slate-50 p-3 text-xs">name,location,event_date,description,category,status,contact
+Llaves con llavero rojo,Biblioteca central,2026-03-15,Tres llaves y un llavero,keys,found,ana@universidad.edu
+Mochila azul,Cafetería,15/03/2026,Contiene un cuaderno,bags,lost,</pre>
+      </div>
+
+      <div>
+        <p class="mb-1 font-medium text-slate-900">Ejemplo con punto y coma</p>
+        <pre class="overflow-x-auto rounded-md border border-slate-200 bg-slate-50 p-3 text-xs">name;location;event_date;description;category;status;contact
+Calculadora científica;Aula 204;2026-03-12;Marca Casio;Electrónica;Perdido;
+Paraguas negro;Entrada principal;12/03/2026;;Otros;Entregado;</pre>
+      </div>
+
+      <ul class="list-disc space-y-1 pl-5">
+        <li>El separador puede ser coma o punto y coma; se detecta automáticamente.</li>
+        <li>El archivo debe estar codificado en UTF-8 (el formato habitual al guardar como «CSV UTF-8» en Excel).</li>
+        <li>Máximo {{ max_rows|formato_numero }} filas y 5 MB por archivo.</li>
+        <li>Las filas con errores se omiten y se indican al terminar; el resto se importa.</li>
+        <li>Las fotografías no se importan. Todos los reportes quedan registrados a su nombre.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="csv-upload-title">
+    <div class="card-header" id="csv-upload-title">Subir archivo</div>
+    <div class="card-body">
+      <form method="post" enctype="multipart/form-data">
+        {{ csrf_field() }}
+        <div class="mb-4">
+          <label class="form-label" for="file">Archivo CSV</label>
+          <input type="file" id="file" name="file" class="form-input" accept=".csv,text/csv" required>
         </div>
-    </form>
+        <div class="flex flex-wrap items-center gap-3">
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-upload" aria-hidden="true"></i> Importar archivo
+          </button>
+          <a href="{{ url_for('main.export_csv') }}" class="btn btn-secondary">
+            <i class="bi bi-download" aria-hidden="true"></i> Descargar reportes
+          </a>
+        </div>
+      </form>
+    </div>
+  </section>
 </div>
 {% endblock %}

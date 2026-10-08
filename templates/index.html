@@ -1,139 +1,81 @@
+{#
+  The ONE listing and search page. Context from main.index:
+    items (pagination), filters (q, estado, categoria, mes), filters_active, status_counts,
+    total (reports matching q/categoria/mes in any status), category_options.
+#}
 {% extends "base.html" %}
-{% block title %}Inventory{% endblock %}
+{% from "_macros.html" import page_header, pagination, empty_state, filter_chip %}
+{% from "_items_grid.html" import items_grid %}
+{% block title %}Objetos{% endblock %}
 
 {% block content %}
+{% if not items.total and not filters_active %}
+  {{ page_header("Objetos perdidos y encontrados") }}
+  {{ empty_state(
+      "Aún no hay reportes registrados.",
+      "Registre el primer objeto perdido o encontrado, o importe varios reportes desde un archivo CSV.",
+      url_for("main.add"),
+      "Reportar objeto",
+      "bi-search") }}
+{% else %}
+  {% set noun = 'reporte' if items.total == 1 else 'reportes' %}
+  {% if filters_active %}
+    {% set subtitle = (items.total|formato_numero) ~ ' ' ~ noun ~ ' con los filtros aplicados' %}
+  {% else %}
+    {% set subtitle = (items.total|formato_numero) ~ ' ' ~ noun ~ (' registrado' if items.total == 1 else ' registrados') %}
+  {% endif %}
+  {{ page_header("Objetos perdidos y encontrados", subtitle) }}
 
-<h1 class="text-3xl font-bold mb-8">Inventory</h1>
+  <form method="get" action="{{ url_for('main.index') }}" role="search" class="filter-bar" aria-label="Filtrar objetos">
+    {% if filters.estado %}<input type="hidden" name="estado" value="{{ filters.estado }}">{% endif %}
+    <div class="filter-bar__field filter-bar__field--wide">
+      <label class="form-label" for="q">Buscar</label>
+      <input type="search" id="q" name="q" value="{{ filters.q }}" class="form-input"
+             placeholder="Objeto, descripción o lugar" maxlength="120">
+    </div>
+    <div class="filter-bar__field">
+      <label class="form-label" for="categoria">Categoría</label>
+      <select id="categoria" name="categoria" class="form-input">
+        <option value="">Todas las categorías</option>
+        {% for value, label in category_options %}
+        <option value="{{ value }}"{% if value == filters.categoria %} selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="filter-bar__field">
+      <label class="form-label" for="mes">Mes del suceso</label>
+      <input type="month" id="mes" name="mes" value="{{ filters.mes }}" class="form-input">
+    </div>
+    <div class="filter-bar__actions">
+      <button type="submit" class="btn btn-primary">
+        <i class="bi bi-funnel" aria-hidden="true"></i> Aplicar
+      </button>
+      <a href="{{ url_for('main.index') }}" class="btn btn-secondary">Limpiar filtros</a>
+    </div>
+  </form>
 
-<!-- Inventory Table -->
-<div class="overflow-x-auto bg-white rounded-xl shadow-md border border-gray-200">
-    <table class="w-full text-left border-collapse">
-        <thead class="bg-gray-50 text-gray-700 border-b">
-            <tr>
-                <th class="px-6 py-4 font-semibold text-sm">Item</th>
-                <th class="px-6 py-4 font-semibold text-sm">Description</th>
-                <th class="px-6 py-4 font-semibold text-sm">Category</th>
-                <th class="px-6 py-4 font-semibold text-sm">Quantity</th>
-                <th class="px-6 py-4 font-semibold text-sm">Price</th>
-                <th class="px-6 py-4 font-semibold text-sm text-right">Actions</th>
-            </tr>
-        </thead>
+  {% set base = {} %}
+  {% for key in ('q', 'categoria', 'mes') %}
+    {% if filters[key] %}{% set _ = base.update({key: filters[key]}) %}{% endif %}
+  {% endfor %}
+  <nav class="chip-list" aria-label="Filtrar por estado">
+    {{ filter_chip("Todos", url_for("main.index", **base), status_counts["all"], not filters.estado) }}
+    {{ filter_chip("Perdidos", url_for("main.index", estado="lost", **base), status_counts["lost"], filters.estado == "lost") }}
+    {{ filter_chip("Encontrados", url_for("main.index", estado="found", **base), status_counts["found"], filters.estado == "found") }}
+    {{ filter_chip("Entregados", url_for("main.index", estado="returned", **base), status_counts["returned"], filters.estado == "returned") }}
+  </nav>
 
-        <tbody>
-            {% for item in items.items %}
-            <tr class="border-b hover:bg-gray-50 transition-all">
-                
-                <!-- ITEM + IMAGE -->
-                <td class="px-6 py-4">
-                    <div class="flex items-center gap-3">
-                        {% if item.image_filename %}
-                            <img src="{{ url_for('static', filename='uploads/' ~ item.image_filename) }}"
-                                 alt="thumb"
-                                 class="w-12 h-12 object-cover rounded-md border">
-                        {% else %}
-                            <div class="w-12 h-12 bg-gray-100 border rounded-md flex items-center justify-center text-gray-400">
-                                <i class="bi bi-image"></i>
-                            </div>
-                        {% endif %}
-
-                        <div>
-                            <a href="{{ url_for('main.view', item_id=item.id) }}"
-                               class="font-semibold text-blue-600 hover:underline text-sm">
-                                {{ item.name }}
-                            </a>
-
-                            <p class="text-xs text-gray-500">
-                                {{ item.created_at.strftime('%b %d, %Y') }}
-                            </p>
-                        </div>
-                    </div>
-                </td>
-
-                <!-- DESCRIPTION -->
-                <td class="px-6 py-4 text-sm text-gray-700 description-cell" title="{{ item.description }}">
-                    {{ item.description }}
-                </td>
-
-                <!-- CATEGORY -->
-                <td class="px-6 py-4">
-                    {% if item.category %}
-                        <span class="text-xs px-2 py-1 rounded-md bg-gray-100 border text-gray-700">
-                            {{ item.category }}
-                        </span>
-                    {% else %}
-                        <span class="text-xs text-gray-400">—</span>
-                    {% endif %}
-                </td>
-
-                <!-- QUANTITY -->
-                <td class="px-6 py-4">
-                    {% if item.quantity < low_stock_threshold %}
-                        <div class="inline-flex items-center gap-2">
-                            <span class="text-red-600 font-semibold text-sm">{{ item.quantity }}</span>
-                            <span class="text-[11px] text-red-700 bg-red-100 border border-red-200 px-2 py-0.5 rounded-md">
-                                Low Stock
-                            </span>
-                        </div>
-                    {% else %}
-                        <span class="text-sm">{{ item.quantity }}</span>
-                    {% endif %}
-                </td>
-
-                <!-- PRICE -->
-                <td class="px-6 py-4 font-bold text-green-600 text-sm">
-                    ${{ "%.2f"|format(item.price) }}
-                </td>
-
-                <!-- ACTIONS -->
-                <td class="px-6 py-4 text-right">
-                    <div class="inline-flex items-center gap-2">
-
-                        <!-- VIEW -->
-                        <a href="{{ url_for('main.view', item_id=item.id) }}"
-                           class="inline-flex items-center gap-1 px-3 py-1.5 text-sm bg-blue-500 text-white rounded-md hover:bg-blue-600">
-                            <i class="bi bi-eye-fill text-sm"></i> View
-                        </a>
-
-                        <!-- EDIT -->
-                        <a href="{{ url_for('main.edit', item_id=item.id) }}"
-                           class="inline-flex items-center gap-1 px-3 py-1.5 text-sm bg-yellow-500 text-white rounded-md hover:bg-yellow-600">
-                            <i class="bi bi-pencil-fill text-sm"></i> Edit
-                        </a>
-
-                        <!-- DELETE -->
-                        <form method="POST" action="{{ url_for('main.delete', item_id=item.id) }}">
-                            <button onclick="return confirm('Delete this item?')"
-                                    class="inline-flex items-center gap-1 px-3 py-1.5 text-sm bg-red-600 text-white rounded-md hover:bg-red-700">
-                                <i class="bi bi-trash3-fill text-sm"></i> Delete
-                            </button>
-                        </form>
-
-                    </div>
-                </td>
-
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
-
-<!-- PAGINATION -->
-<div class="flex justify-center items-center gap-4 mt-8 text-gray-700 text-sm">
-    {% if items.has_prev %}
-        <a href="{{ url_for('main.index', page=items.prev_num) }}" 
-           class="hover:underline">Previous</a>
-    {% else %}
-        <span class="text-gray-400">Previous</span>
-    {% endif %}
-
-    <span class="font-semibold">Page {{ items.page }} / {{ items.pages }}</span>
-
-    {% if items.has_next %}
-        <a href="{{ url_for('main.index', page=items.next_num) }}" 
-           class="hover:underline">Next</a>
-    {% else %}
-        <span class="text-gray-400">Next</span>
-    {% endif %}
-</div>
-
+  {% if items.total %}
+    {{ items_grid(items.items) }}
+    {{ pagination(items, "main.index", q=filters.q, estado=filters.estado, categoria=filters.categoria, mes=filters.mes) }}
+  {% else %}
+    {{ empty_state(
+        "No se encontraron objetos con los filtros aplicados.",
+        "Pruebe con otros términos o quite alguno de los filtros.",
+        url_for("main.index"),
+        "Limpiar filtros",
+        "bi-search",
+        "btn-secondary") }}
+  {% endif %}
+{% endif %}
 {% endblock %}

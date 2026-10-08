@@ -1,11 +1,21 @@
-from flask import Blueprint, render_template, redirect, url_for, flash, request
-from flask_login import login_user, logout_user, login_required
+from datetime import datetime, timezone
+from urllib.parse import quote
+
+from flask import Blueprint, flash, redirect, render_template, request, url_for
+from flask_login import current_user, login_required, login_user, logout_user
+from sqlalchemy.exc import IntegrityError
+
 from extensions import db
-from models import User
 from forms import LoginForm, RegisterForm
-from datetime import datetime
+from models import User
+from utils import is_safe_redirect_target
 
 bp = Blueprint("auth", __name__, template_folder="templates")
+
+
+def _utc_now():
+    """Naive UTC timestamp, the format the database columns store."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 # ===========================
@@ -13,27 +23,33 @@ bp = Blueprint("auth", __name__, template_folder="templates")
 # ===========================
 @bp.route("/login", methods=["GET", "POST"])
 def login():
+    if current_user.is_authenticated:
+        return redirect(url_for("main.index"))
+
     form = LoginForm()
+
+    # Only same-site relative paths survive; anything else is dropped silently.
+    requested_next = request.args.get("next")
+    safe_next = requested_next if is_safe_redirect_target(requested_next) else None
+    login_action = url_for("auth.login")
+    if safe_next:
+        login_action += "?next=" + quote(safe_next, safe="")
 
     if form.validate_on_submit():
         user = User.query.filter_by(username=form.username.data).first()
 
         if user is None or not user.check_password(form.password.data):
-            flash("Invalid username or password.", "danger")
-            return redirect(url_for("auth.login"))
+            flash("Usuario o contraseña incorrectos.", "danger")
+            return redirect(login_action)
 
-        # Update last login AFTER successful login
-        user.last_login = datetime.utcnow()
+        user.last_login = _utc_now()
         db.session.commit()
 
         login_user(user)
+        flash("Sesión iniciada correctamente.", "success")
+        return redirect(safe_next or url_for("main.index"))
 
-        flash("Logged in successfully!", "success")
-
-        next_page = request.args.get("next")
-        return redirect(next_page or url_for("main.index"))
-
-    return render_template("login.html", form=form)
+    return render_template("login.html", form=form, login_action=login_action)
 
 
 # ===========================
@@ -41,33 +57,37 @@ def login():
 # ===========================
 @bp.route("/register", methods=["GET", "POST"])
 def register():
+    if current_user.is_authenticated:
+        return redirect(url_for("main.index"))
+
     form = RegisterForm()
 
     if form.validate_on_submit():
-        # Check if username exists
-        existing_username = User.query.filter_by(username=form.username.data).first()
-        if existing_username:
-            flash("Username already taken.", "warning")
+        if User.query.filter_by(username=form.username.data).first():
+            flash("El nombre de usuario ya está en uso.", "warning")
             return redirect(url_for("auth.register"))
 
-        # Check email duplicate
-        existing_email = User.query.filter_by(email=form.email.data).first()
-        if existing_email:
-            flash("Email already in use.", "danger")
+        if User.query.filter_by(email=form.email.data).first():
+            flash("El correo electrónico ya está en uso.", "danger")
             return redirect(url_for("auth.register"))
 
-        # Create user
         new_user = User(
             username=form.username.data,
             email=form.email.data,
-            created_at=datetime.utcnow()
+            created_at=_utc_now(),
         )
         new_user.set_password(form.password.data)
-
         db.session.add(new_user)
-        db.session.commit()
 
-        flash("Account created! Please log in.", "success")
+        try:
+            db.session.commit()
+        except IntegrityError:
+            # Another request registered the same username/email between check and insert.
+            db.session.rollback()
+            flash("El nombre de usuario o el correo electrónico ya está en uso.", "danger")
+            return redirect(url_for("auth.register"))
+
+        flash("Cuenta creada correctamente. Inicie sesión.", "success")
         return redirect(url_for("auth.login"))
 
     return render_template("register.html", form=form)
@@ -76,9 +96,9 @@ def register():
 # ===========================
 # LOGOUT
 # ===========================
-@bp.route("/logout")
+@bp.route("/logout", methods=["POST"])
 @login_required
 def logout():
     logout_user()
-    flash("Logged out successfully!", "info")
+    flash("Sesión cerrada correctamente.", "info")
     return redirect(url_for("auth.login"))

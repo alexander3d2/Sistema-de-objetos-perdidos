@@ -1,125 +1,76 @@
 {% extends "base.html" %}
-{% block title %}Profile{% endblock %}
+{% from "_macros.html" import field, form_errors, page_header %}
+{% block title %}Perfil{% endblock %}
 
 {% block content %}
+{{ page_header("Perfil", "Datos de su cuenta y actividad.") }}
 
-<div class="max-w-3xl mx-auto bg-white shadow rounded-xl p-8">
+<div class="grid gap-6 md:grid-cols-3">
 
-    <!-- Header -->
-    <div class="flex items-center gap-6">
+  <!-- Identity and avatar -->
+  <section class="card md:col-span-1" aria-labelledby="profile-name">
+    <div class="card-body">
+      <div class="flex flex-col items-center text-center">
+        <img src="{{ avatar_url(user) }}"
+             alt="Foto de perfil de {{ user.username }}"
+             class="h-28 w-28 rounded-full border border-slate-200 object-cover">
+        <h2 id="profile-name" class="mt-4 text-xl font-semibold text-slate-900">{{ user.username }}</h2>
+        <p class="break-all text-sm text-slate-600">{{ user.email or "—" }}</p>
+      </div>
 
-        <!-- Avatar -->
-        <img src="{{ url_for('static', filename='avatars/' ~ user.avatar) }}"
-             class="w-28 h-28 rounded-full border shadow">
-
-        <div>
-            <h1 class="text-3xl font-bold">{{ user.username }}</h1>
-            <p class="text-gray-500">{{ user.email }}</p>
-        </div>
+      <form method="post" action="{{ url_for('profile.update_avatar') }}" enctype="multipart/form-data"
+            class="mt-6 border-t border-slate-200 pt-6" novalidate>
+        {{ avatar_form.hidden_tag() }}
+        {{ form_errors(avatar_form) }}
+        {{ field(avatar_form.avatar, accept=".png,.jpg,.jpeg,.gif,.webp", help="PNG, JPG, GIF o WEBP. Máximo 5 MB.") }}
+        <button type="submit" class="btn btn-primary w-full">{{ avatar_form.submit.label.text }}</button>
+      </form>
     </div>
+  </section>
 
-    <!-- Upload Avatar -->
-    <form action="{{ url_for('profile.update_avatar') }}" method="POST" enctype="multipart/form-data"
-          class="mt-4 flex items-center gap-4">
+  <!-- Details -->
+  <div class="space-y-6 md:col-span-2">
 
-        <input type="file" name="avatar" class="border p-2 rounded">
-        <button class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
-            Update Avatar
-        </button>
-    </form>
-
-    <!-- Bio -->
-    <div class="mt-4">
-        <h2 class="font-semibold text-lg">Bio</h2>
-
+    <section class="card" aria-labelledby="bio-title">
+      <div class="card-header"><h2 id="bio-title" class="text-base font-semibold">Biografía</h2></div>
+      <div class="card-body">
         {% if user.bio %}
-            <p id="bio-text"
-               class="text-gray-700 mt-2 whitespace-pre-line overflow-hidden"
-               style="
-                    display: -webkit-box;
-                    -webkit-line-clamp: 3;
-                    -webkit-box-orient: vertical;
-                    overflow-wrap: break-word;
-                    word-break: break-word;
-               ">
-                {{ user.bio }}
-            </p>
-
-            <button id="toggle-bio"
-                    class="mt-2 text-blue-600 hover:underline text-sm">
-                Show More
-            </button>
-
+          <p class="whitespace-pre-line break-words text-slate-700">{{ user.bio }}</p>
         {% else %}
-            <p class="text-gray-400">No bio added yet.</p>
+          <p class="text-slate-500">Aún no se ha agregado una biografía.</p>
         {% endif %}
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="activity-title">
+      <div class="card-header"><h2 id="activity-title" class="text-base font-semibold">Actividad</h2></div>
+      <div class="card-body">
+        <dl class="grid gap-6 sm:grid-cols-3">
+          <div>
+            <dt class="text-sm text-slate-500">Reportes registrados</dt>
+            <dd class="mt-1 text-2xl font-semibold text-primary-900">{{ user.items|length }}</dd>
+          </div>
+          <div>
+            <dt class="text-sm text-slate-500">Miembro desde</dt>
+            <dd class="mt-1 font-medium text-slate-900">{{ user.created_at|fecha }}</dd>
+          </div>
+          <div>
+            <dt class="text-sm text-slate-500">Último acceso</dt>
+            <dd class="mt-1 font-medium text-slate-900">{{ (user.last_login|fecha_hora) if user.last_login else "—" }}</dd>
+          </div>
+        </dl>
+        <p class="form-help mt-4">Zona horaria: {{ config.DISPLAY_TIMEZONE }}</p>
+      </div>
+    </section>
+
+    <div class="flex flex-wrap gap-3">
+      <a class="btn btn-secondary" href="{{ url_for('profile.edit_profile') }}">
+        <i class="bi bi-pencil-square" aria-hidden="true"></i>Editar perfil
+      </a>
+      <a class="btn btn-secondary" href="{{ url_for('profile.change_password') }}">
+        <i class="bi bi-key" aria-hidden="true"></i>Cambiar contraseña
+      </a>
     </div>
-
-    <script>
-        const bioText = document.getElementById("bio-text");
-        const toggleBtn = document.getElementById("toggle-bio");
-
-        if (toggleBtn) {
-            toggleBtn.addEventListener("click", () => {
-                const isExpanded = bioText.style.webkitLineClamp === "unset";
-
-                if (isExpanded) {
-                    // Collapse
-                    bioText.style.webkitLineClamp = "3";
-                    toggleBtn.textContent = "Show More";
-                } else {
-                    // Expand
-                    bioText.style.webkitLineClamp = "unset";
-                    toggleBtn.textContent = "Show Less";
-                }
-            });
-        }
-    </script>
-
-    <!-- Stats -->
-    <div class="grid grid-cols-3 text-center mt-8 border rounded-lg py-4 bg-gray-50">
-
-        <!-- Items Added -->
-        <div>
-            <div class="text-2xl font-bold text-blue-600">{{ user.items|length }}</div>
-            <div class="text-gray-600">Items Added</div>
-        </div>
-
-        <!-- Member Since -->
-        <div>
-            <div class="text-2xl font-bold text-blue-600">{{ user.created_at.strftime('%Y') }}</div>
-            <div class="text-gray-600">Member Since</div>
-        </div>
-
-        <!-- Last Login -->
-        <div>
-            <div class="text-2xl font-bold text-blue-600">
-                {% if user.last_login %}
-                    {% set pk = pytz.timezone('Asia/Karachi') %}
-                    {% set local_time = user.last_login.replace(tzinfo=pytz.UTC).astimezone(pk) %}
-                    {{ local_time.strftime('%b %d, %Y at %I:%M %p') }}
-                {% else %}
-                    –
-                {% endif %}
-            </div>
-            <div class="text-gray-600">Last Login</div>
-        </div>
-
-    </div>
-
-    <!-- Actions -->
-    <div class="flex gap-4 mt-8">
-        <a href="{{ url_for('profile.edit_profile') }}"
-           class="px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600">
-            Edit Profile
-        </a>
-
-        <a href="{{ url_for('profile.change_password') }}"
-           class="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-800">
-            Change Password
-        </a>
-    </div>
-
+  </div>
 </div>
-
 {% endblock %}

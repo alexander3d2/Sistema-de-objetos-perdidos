@@ -1,148 +1,225 @@
+{#-
+  Base layout: navbar, flash messages, content container and footer.
+
+  BLOCKS (all optional except content)
+    title    Page title. Rendered as "<title>{title} · Objetos perdidos</title>"; empty -> "Objetos perdidos".
+    head     Extra <head> content (meta tags, page-specific <link>/<style>).
+    content  Page body, rendered inside the centered max-w-6xl container below the flash messages.
+    scripts  Page-specific scripts, rendered at the end of <body>.
+
+  LAYOUT BLOCKS (the defaults reproduce the standard application shell; override them only for
+  special full-screen pages such as login.html and register.html, which empty header/footer)
+    body_class  Classes of <body>.
+    header      The global navigation <header> (rendered after the skip link).
+    flash       Flash messages, rendered at the top of <main> before content.
+    main_class  Classes of <main id="main-content">.
+    footer      The global <footer>.
+
+  Shared components live in static/css/app.css (classes) and templates/_macros.html (macros).
+   Context provided by the app: current_year and avatar_url().
+-#}
+{%- from "_macros.html" import flash_messages, csrf_field -%}
+{%- set page_title %}{% block title %}{% endblock %}{% endset -%}
+{%- set endpoint = request.endpoint or '' -%}
+{%- macro nav_link(href, label, icon, active=False) -%}
+<a href="{{ href }}"
+   class="app-nav-link inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium {{ 'is-active' if active else '' }}"
+   {%- if active %} aria-current="page"{% endif %}>
+  <i class="bi {{ icon }}" aria-hidden="true"></i>{{ label }}
+</a>
+{%- endmacro -%}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ title or "Inventory App" }}</title>
+    <title>{% if page_title|trim %}{{ page_title|trim }} · Objetos perdidos{% else %}Objetos perdidos{% endif %}</title>
 
-    <!-- TailwindCSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tailwind (Play CDN, pinned) and theme -->
+    <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#eafafd',
+                            100: '#d5f3f7',
+                            200: '#a9e7ef',
+                            300: '#73d4df',
+                            400: '#39a1c4',
+                            500: '#00a2c5',
+                            600: '#0d97a4',
+                            700: '#196593',
+                            800: '#154462',
+                            900: '#0f344a'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif']
+                    }
+                }
+            }
+        };
+    </script>
 
-    <!-- Fonts & Icons -->
+    <!-- Fonts and icons -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
 
-    <style>
-        body {
-            font-family: "Inter", sans-serif;
-        }
-
-        .description-cell {
-            max-width: 250px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .item-description {
-            max-width: 100%;
-            white-space: normal !important;
-            word-wrap: break-word !important;
-            overflow-wrap: break-word !important;
-            line-height: 1.6;
-            font-size: 1rem;
-        }
-    </style>
+    <!-- Design system components -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css', v=4) }}">
+    {% block head %}{% endblock %}
 </head>
 
-<body class="bg-gray-50 text-gray-900 min-h-screen flex flex-col">
+<body class="{% block body_class %}app-shell flex min-h-screen flex-col font-sans text-slate-900 antialiased{% endblock %}">
 
+    <a href="#main-content"
+       class="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded-md focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:shadow">
+        Saltar al contenido
+    </a>
+
+    {% block header %}
     <!-- NAVBAR -->
-    <nav class="bg-white shadow">
-        <div class="max-w-6xl mx-auto px-4 py-4 flex justify-between items-center">
+    <header class="app-header border-b border-primary-900">
+        <nav class="mx-auto max-w-6xl px-4" aria-label="Navegación principal">
+             <div class="flex min-w-0 items-center justify-between py-3">
 
-            <!-- Logo -->
-            <a href="{{ url_for('main.index') }}" class="text-2xl font-bold text-blue-600">
-                Inventory
-            </a>
+                <a href="{{ url_for('main.index') }}" class="brand-lockup min-w-0" aria-label="Objetos perdidos · Universidad Católica Sedes Sapientiae">
+                    <span class="brand-logo-panel"><img class="brand-logo" src="{{ url_for('static', filename='img/ucss-logo.png', v=2) }}" alt="Universidad Católica Sedes Sapientiae (UCSS)"></span>
+                    <span class="brand-product">Objetos perdidos</span>
+                </a>
 
-            <div class="flex items-center gap-6 text-lg">
+                <button type="button" id="nav-toggle"
+                        class="app-menu-toggle rounded-md p-2 md:hidden"
+                        aria-controls="nav-menu" aria-expanded="false" aria-label="Abrir menú">
+                    <i class="bi bi-list text-2xl" aria-hidden="true"></i>
+                </button>
 
-                <a href="{{ url_for('main.index') }}" class="hover:text-blue-600">Home</a>
-                <a href="{{ url_for('main.search') }}" class="hover:text-blue-600">Search</a>
-                <a href="{{ url_for('dashboard.home') }}" class="hover:text-blue-600">Dashboard</a>
+                <div id="nav-menu"
+                      class="app-nav-menu absolute left-0 right-0 top-14 z-40 hidden flex-col gap-1 border-b px-4 pb-4 pt-2 shadow-sm md:static md:ml-6 md:flex md:flex-1 md:flex-row md:items-center md:gap-1 md:border-0 md:bg-transparent md:p-0 md:shadow-none">
 
-                {% if current_user.is_authenticated %}
+                    {% if current_user.is_authenticated %}
 
-                    <!-- Add Item -->
-                    <a href="{{ url_for('main.add') }}"
-                       class="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700">
-                        Add Item
-                    </a>
-
-                    <!-- Avatar Dropdown -->
-                    <div class="relative" id="user-menu-wrapper">
-
-                        <!-- Avatar Button -->
-                        <button id="user-menu-btn">
-                            <img src="{{ url_for('static', filename='avatars/' ~ current_user.avatar) }}"
-                                 class="w-10 h-10 rounded-full border object-cover cursor-pointer">
-                        </button>
-
-                        <!-- Dropdown Menu -->
-                        <div id="user-menu"
-                             class="absolute right-0 mt-3 w-48 bg-white shadow-lg rounded-lg hidden transition-all">
-
-                            <a href="{{ url_for('profile.view_profile') }}"
-                               class="block px-4 py-2 hover:bg-gray-100">Profile</a>
-
-                            <a href="{{ url_for('profile.change_password') }}"
-                               class="block px-4 py-2 hover:bg-gray-100">Change Password</a>
-
-                            <a href="{{ url_for('auth.logout') }}"
-                               class="block px-4 py-2 text-red-600 hover:bg-gray-100">Logout</a>
-
+                        <div class="flex flex-col gap-1 md:flex-row md:items-center md:gap-1">
+                            {{ nav_link(url_for('main.index'), 'Objetos', 'bi-search', endpoint in ('main.index', 'main.view', 'main.edit')) }}
+                            {{ nav_link(url_for('dashboard.home'), 'Panel', 'bi-speedometer2', endpoint.startswith('dashboard.')) }}
+                            {{ nav_link(url_for('main.import_csv'), 'Importar CSV', 'bi-upload', endpoint == 'main.import_csv') }}
+                            {{ nav_link(url_for('main.export_csv'), 'Exportar CSV', 'bi-download') }}
                         </div>
-                    </div>
 
-                {% else %}
-                    <a href="{{ url_for('auth.login') }}" class="hover:text-blue-600">Login</a>
-                    <a href="{{ url_for('auth.register') }}" class="hover:text-blue-600">Register</a>
-                {% endif %}
+                        <div class="mt-3 flex flex-col gap-3 md:ml-auto md:mt-0 md:flex-row md:items-center">
 
+                            <a href="{{ url_for('main.add') }}" class="btn btn-primary">
+                                <i class="bi bi-plus-lg" aria-hidden="true"></i>Reportar objeto
+                            </a>
+
+                            <!-- User menu -->
+                            <div class="relative" id="user-menu-wrapper">
+                                <button type="button" id="user-menu-btn"
+                                         class="app-user-button flex w-full items-center gap-2 rounded-md px-2 py-1"
+                                        aria-haspopup="true" aria-expanded="false" aria-controls="user-menu">
+                                    <img src="{{ avatar_url(current_user) }}"
+                                         alt="Avatar de {{ current_user.username }}"
+                                         class="h-8 w-8 rounded-full border border-slate-200 object-cover">
+                                    <span class="text-sm font-medium text-slate-700">{{ current_user.username }}</span>
+                                    <i class="bi bi-chevron-down text-xs text-slate-500" aria-hidden="true"></i>
+                                </button>
+
+                                <div id="user-menu"
+                                     class="app-user-menu absolute right-0 z-50 mt-2 hidden w-56 rounded-lg border bg-white py-1 shadow-lg">
+                                    <a href="{{ url_for('profile.view_profile') }}"
+                                       class="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-100">Perfil</a>
+                                    <a href="{{ url_for('profile.change_password') }}"
+                                       class="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-100">Cambiar contraseña</a>
+                                    <form method="post" action="{{ url_for('auth.logout') }}" class="border-t border-slate-200">
+                                        {{ csrf_field() }}
+                                        <button type="submit"
+                                                class="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-100">
+                                            Cerrar sesión
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+
+                    {% else %}
+
+                        <div class="flex flex-col gap-2 md:ml-auto md:flex-row md:items-center">
+                            <a href="{{ url_for('auth.login') }}" class="btn btn-ghost">Iniciar sesión</a>
+                            <a href="{{ url_for('auth.register') }}" class="btn btn-primary">Registrarse</a>
+                        </div>
+
+                    {% endif %}
+                </div>
             </div>
-        </div>
-    </nav>
-
-    <!-- FLASH MESSAGES -->
-    <div class="max-w-4xl mx-auto mt-4">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    {% set color =
-                        'green' if category == 'success' else
-                        'red' if category == 'danger' else
-                        'yellow' if category == 'warning' else
-                        'blue' %}
-                    <div class="bg-{{ color }}-100 border-l-4 border-{{ color }}-600
-                                text-{{ color }}-700 p-4 mb-3 rounded">
-                        {{ message }}
-                    </div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-    </div>
+        </nav>
+    </header>
+    {% endblock %}
 
     <!-- MAIN CONTENT -->
-    <main class="max-w-6xl mx-auto py-10 px-4 flex-grow">
+    <main id="main-content" class="{% block main_class %}page-shell mx-auto w-full max-w-6xl flex-1 px-4 py-8{% endblock %}">
+        {% block flash %}{{ flash_messages() }}{% endblock %}
         {% block content %}{% endblock %}
     </main>
 
+    {% block footer %}
     <!-- FOOTER -->
-    <footer class="text-center text-gray-500 py-6">
-        © {{ current_year or 2025 }} Inventory App
+    <footer class="app-footer border-t">
+        <div class="mx-auto max-w-6xl px-4 py-4 text-center text-sm text-slate-500">
+            © {{ current_year }} Objetos perdidos <span aria-hidden="true">·</span> Sistema de reportes de objetos perdidos y encontrados
+        </div>
     </footer>
+    {% endblock %}
 
-    <!-- DROPDOWN SCRIPT -->
+    <!-- Navigation, user menu and flash behavior (every lookup is null-checked) -->
     <script>
-        document.addEventListener("DOMContentLoaded", function () {
+        (function () {
+            var navToggle = document.getElementById("nav-toggle");
+            var navMenu = document.getElementById("nav-menu");
+            if (navToggle && navMenu) {
+                navToggle.addEventListener("click", function () {
+                    var hidden = navMenu.classList.toggle("hidden");
+                    navToggle.setAttribute("aria-expanded", hidden ? "false" : "true");
+                });
+            }
 
-            const btn = document.getElementById("user-menu-btn");
-            const menu = document.getElementById("user-menu");
+            var userButton = document.getElementById("user-menu-btn");
+            var userMenu = document.getElementById("user-menu");
+            if (userButton && userMenu) {
+                var closeUserMenu = function () {
+                    userMenu.classList.add("hidden");
+                    userButton.setAttribute("aria-expanded", "false");
+                };
+                userButton.addEventListener("click", function (event) {
+                    event.stopPropagation();
+                    var hidden = userMenu.classList.toggle("hidden");
+                    userButton.setAttribute("aria-expanded", hidden ? "false" : "true");
+                });
+                document.addEventListener("click", function (event) {
+                    if (!userMenu.contains(event.target) && !userButton.contains(event.target)) {
+                        closeUserMenu();
+                    }
+                });
+                document.addEventListener("keydown", function (event) {
+                    if (event.key === "Escape") {
+                        closeUserMenu();
+                    }
+                });
+            }
 
-            btn.addEventListener("click", (e) => {
-                e.stopPropagation();
-                menu.classList.toggle("hidden");
-            });
-
-            document.addEventListener("click", (e) => {
-                if (!menu.contains(e.target) && !btn.contains(e.target)) {
-                    menu.classList.add("hidden");
-                }
-            });
-
-        });
+            var closeButtons = document.querySelectorAll("[data-flash-close]");
+            for (var i = 0; i < closeButtons.length; i++) {
+                closeButtons[i].addEventListener("click", function (event) {
+                    var alertBox = event.currentTarget.closest("[data-flash]");
+                    if (alertBox) {
+                        alertBox.remove();
+                    }
+                });
+            }
+        })();
     </script>
 
+    {% block scripts %}{% endblock %}
 </body>
 </html>

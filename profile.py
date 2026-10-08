@@ -1,133 +1,121 @@
 import os
-from flask import (
-    Blueprint, render_template, redirect,
-    url_for, flash, request
-)
-from flask_login import login_required, current_user
+from datetime import datetime, timezone
+
+from flask import Blueprint, current_app, flash, redirect, render_template, url_for
+from flask_login import current_user, login_required
 from werkzeug.utils import secure_filename
+
 from extensions import db
-from werkzeug.security import generate_password_hash
+from forms import AVATAR_EXTENSIONS, AvatarUploadForm, ChangePasswordForm, EditProfileForm
 
 # ----------------------------------------------------------
-# BLUEPRINT
+# BLUEPRINT (mounted at /profile)
 # ----------------------------------------------------------
 profile = Blueprint("profile", __name__, template_folder="templates")
 
-# ----------------------------------------------------------
-# AVATAR UPLOAD FOLDER
-# ----------------------------------------------------------
-UPLOAD_FOLDER = "static/avatars"
+INVALID_FORMAT_MESSAGE = "Formato no permitido. Use PNG, JPG, GIF o WEBP."
 
-# Create folder automatically if missing
-if not os.path.exists(UPLOAD_FOLDER):
-    os.makedirs(UPLOAD_FOLDER)
+
+def _avatar_filename(user_id, extension, folder):
+    """Build '<user_id>_<UTC timestamp with microseconds>.<ext>' that does not exist yet."""
+    while True:
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S%f")
+        filename = f"{user_id}_{timestamp}.{extension}"
+        if not os.path.exists(os.path.join(folder, filename)):
+            return filename
+
+
+def _remove_previous_avatar(user_id, previous, folder):
+    """Delete the previous avatar only when it was uploaded by this same user."""
+    if not previous or os.path.basename(previous) != previous:
+        return
+    if not previous.startswith(f"{user_id}_"):
+        return
+    path = os.path.join(folder, previous)
+    if os.path.isfile(path):
+        os.remove(path)
 
 
 # ==========================================================
 # 1) VIEW PROFILE
 # ==========================================================
-@profile.route("/profile")
+@profile.route("/")
 @login_required
 def view_profile():
-    return render_template("profile.html", user=current_user)
+    return render_template(
+        "profile.html", user=current_user, avatar_form=AvatarUploadForm()
+    )
 
 
 # ==========================================================
 # 2) UPDATE AVATAR
 # ==========================================================
-@profile.route("/profile/avatar", methods=["POST"])
+@profile.route("/avatar", methods=["POST"])
 @login_required
 def update_avatar():
+    form = AvatarUploadForm()
 
-    file = request.files.get("avatar")
-
-    if not file:
-        flash("Please upload a file.", "warning")
+    if not form.validate_on_submit():
+        for errors in form.errors.values():
+            for error in errors:
+                flash(error, "danger")
         return redirect(url_for("profile.view_profile"))
 
-    filename = secure_filename(file.filename)
-
-    if filename == "":
-        flash("Invalid file.", "danger")
+    uploaded = form.avatar.data
+    safe_name = secure_filename(uploaded.filename or "")
+    extension = os.path.splitext(safe_name)[1].lower().lstrip(".")
+    if extension not in AVATAR_EXTENSIONS:
+        flash(INVALID_FORMAT_MESSAGE, "danger")
         return redirect(url_for("profile.view_profile"))
 
-    # Save file
-    save_path = os.path.join(UPLOAD_FOLDER, filename)
-    file.save(save_path)
+    folder = current_app.config["AVATAR_UPLOAD_FOLDER"]
+    os.makedirs(folder, exist_ok=True)
+    filename = _avatar_filename(current_user.id, extension, folder)
+    uploaded.save(os.path.join(folder, filename))
 
-    # Save to DB
+    # Persist the new avatar first; the old file is removed only after the commit succeeds.
+    previous = current_user.avatar
     current_user.avatar = filename
     db.session.commit()
+    _remove_previous_avatar(current_user.id, previous, folder)
 
-    flash("Avatar updated successfully!", "success")
+    flash("Foto de perfil actualizada correctamente.", "success")
     return redirect(url_for("profile.view_profile"))
 
 
 # ==========================================================
-# 3) EDIT PROFILE INFO (FINAL VERSION)
+# 3) EDIT PROFILE INFO
 # ==========================================================
-@profile.route("/profile/edit", methods=["GET", "POST"])
+@profile.route("/edit", methods=["GET", "POST"])
 @login_required
 def edit_profile():
+    form = EditProfileForm(obj=current_user, user=current_user)
 
-    if request.method == "POST":
-        username = request.form.get("username").strip()
-        email = request.form.get("email").strip()
-        bio = request.form.get("bio")
-
-        from models import User
-
-        # -------- CHECK IF EMAIL ALREADY EXISTS --------
-        existing_email = User.query.filter_by(email=email).first()
-        if existing_email and existing_email.id != current_user.id:
-            flash("❌ This email is already in use.", "danger")
-            return redirect(url_for("profile.edit_profile"))
-
-        # -------- CHECK IF USERNAME ALREADY EXISTS --------
-        existing_username = User.query.filter_by(username=username).first()
-        if existing_username and existing_username.id != current_user.id:
-            flash("❌ Username already taken.", "danger")
-            return redirect(url_for("profile.edit_profile"))
-
-        # -------- SAVE CHANGES --------
-        current_user.username = username
-        current_user.email = email
-        current_user.bio = bio
-
+    if form.validate_on_submit():
+        current_user.username = form.username.data
+        current_user.email = form.email.data
+        current_user.bio = form.bio.data or None
         db.session.commit()
-        flash("✅ Profile updated successfully!", "success")
+
+        flash("Perfil actualizado correctamente.", "success")
         return redirect(url_for("profile.view_profile"))
 
-    return render_template("profile_edit.html", user=current_user)
+    return render_template("profile_edit.html", form=form, user=current_user)
 
 
 # ==========================================================
 # 4) CHANGE PASSWORD
 # ==========================================================
-@profile.route("/profile/change-password", methods=["GET", "POST"])
+@profile.route("/change-password", methods=["GET", "POST"])
 @login_required
 def change_password():
+    form = ChangePasswordForm(user=current_user)
 
-    if request.method == "POST":
-        current_pw = request.form.get("current_password")
-        new_pw = request.form.get("new_password")
-        confirm_pw = request.form.get("confirm_password")
-
-        # Check current password
-        if not current_user.check_password(current_pw):
-            flash("Current password is incorrect.", "danger")
-            return redirect(url_for("profile.change_password"))
-
-        # Match new passwords
-        if new_pw != confirm_pw:
-            flash("New passwords do not match.", "danger")
-            return redirect(url_for("profile.change_password"))
-
-        # Save new password
-        current_user.password_hash = generate_password_hash(new_pw)
+    if form.validate_on_submit():
+        current_user.set_password(form.new_password.data)
         db.session.commit()
 
-        flash("Password changed successfully!", "success")
+        flash("Contraseña actualizada correctamente.", "success")
         return redirect(url_for("profile.view_profile"))
 
-    return render_template("change_password.html", user=current_user)
+    return render_template("change_password.html", form=form, user=current_user)

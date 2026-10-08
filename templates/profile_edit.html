@@ -1,79 +1,52 @@
 {% extends "base.html" %}
-{% block title %}Edit Profile{% endblock %}
+{% from "_macros.html" import field, form_errors, page_header %}
+{% block title %}Editar perfil{% endblock %}
 
 {% block content %}
+<div class="mx-auto max-w-xl">
+  {{ page_header("Editar perfil", "Actualice los datos de su cuenta.") }}
 
-<div class="max-w-xl mx-auto bg-white shadow p-8 rounded-xl">
+  <div class="card">
+    <div class="card-body">
+      <form method="post" action="{{ url_for('profile.edit_profile') }}" novalidate>
+        {{ form.hidden_tag() }}
+        {{ form_errors(form) }}
 
-    <h1 class="text-3xl font-bold mb-6">Edit Profile</h1>
-
-    <form method="POST">
-
-        <!-- Username -->
-        <label class="block font-medium">Username</label>
-        <input type="text" name="username" value="{{ user.username }}"
-               class="w-full border rounded px-4 py-2 mb-4">
-
-        <!-- Email -->
-        <label class="block font-medium">Email</label>
-        <input type="email" name="email" value="{{ user.email }}"
-               class="w-full border rounded px-4 py-2 mb-4">
-
-        <!-- Bio -->
-        <label class="block font-medium">Bio</label>
-
-        <textarea 
-            name="bio"
-            maxlength="300"
-            rows="3"
-            class="w-full border rounded px-4 py-2 mb-1 resize-none"
-            placeholder="Write something about yourself (max 300 characters)"
-        >{{ user.bio or '' }}</textarea>
-
-        <p id="bio-counter" class="text-sm text-gray-500 mb-5">
-            0 / 300 characters
+        {{ field(form.username, autocomplete="username") }}
+        {{ field(form.email, type="email", autocomplete="email") }}
+        {{ field(form.bio, rows=4, placeholder="Escriba algo sobre usted (máximo 300 caracteres)") }}
+        <p class="-mt-2 mb-4 text-right text-sm text-slate-500" id="bio-counter-wrapper">
+          <span id="bio-counter">{{ (form.bio.data or "")|length }}</span> / 300 caracteres
         </p>
 
-        <!-- Save Button -->
-        <button class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">
-            Save Changes
-        </button>
-
-    </form>
-
+        <div class="flex flex-wrap gap-3">
+          <button type="submit" class="btn btn-primary">{{ form.submit.label.text }}</button>
+          <a class="btn btn-secondary" href="{{ url_for('profile.view_profile') }}">Cancelar</a>
+        </div>
+      </form>
+    </div>
+  </div>
 </div>
+{% endblock %}
 
-<!-- Scripts -->
+{% block scripts %}
 <script>
-    const bio = document.querySelector("textarea[name='bio']");
-    const counter = document.getElementById("bio-counter");
-
-    // AUTO RESIZE TEXTAREA
-    function autoResize() {
-        bio.style.height = 'auto';
-        bio.style.height = bio.scrollHeight + 'px';
-    }
-
-    // COUNTER + WARNING
-    function updateCounter() {
-        const length = bio.value.length;
-        counter.textContent = `${length} / 300 characters`;
-
-        if (300 - length <= 10) {
-            counter.classList.add("text-red-600", "font-semibold");
-        } else {
-            counter.classList.remove("text-red-600", "font-semibold");
+    (function () {
+        var bio = document.getElementById("bio");
+        var counter = document.getElementById("bio-counter");
+        var wrapper = document.getElementById("bio-counter-wrapper");
+        if (!bio || !counter) {
+            return;
         }
-    }
-
-    bio.addEventListener("input", () => {
-        updateCounter();
-        autoResize();
-    });
-
-    // Initialize on load
-    updateCounter();
-    autoResize();
+        var update = function () {
+            counter.textContent = bio.value.length;
+            if (wrapper) {
+                wrapper.classList.toggle("text-red-700", bio.value.length > 300);
+                wrapper.classList.toggle("text-slate-500", bio.value.length <= 300);
+            }
+        };
+        bio.addEventListener("input", update);
+        update();
+    })();
 </script>
-
 {% endblock %}
